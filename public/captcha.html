@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voltura Captcha</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --voltura-primary: #2563eb;
+            --voltura-secondary: #1e40af;
+            --voltura-accent: #3b82f6;
+            --voltura-success: #10b981;
+            --voltura-error: #ef4444;
+            --voltura-warning: #f59e0b;
+            --voltura-background: #f8fafc;
+            --voltura-border: #e2e8f0;
+            --voltura-text: #1e293b;
+        }
+
+        .voltura-captcha-container {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            max-width: 400px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--voltura-border);
+            overflow: hidden;
+        }
+
+        .voltura-captcha-header {
+            background: linear-gradient(135deg, var(--voltura-primary), var(--voltura-secondary));
+            color: white;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .voltura-captcha-logo {
+            font-weight: 700;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .voltura-captcha-logo i {
+            font-size: 1.5rem;
+        }
+
+        .voltura-captcha-body {
+            padding: 24px;
+        }
+
+        .voltura-captcha-challenge {
+            background: var(--voltura-background);
+            border: 1px solid var(--voltura-border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .voltura-captcha-question {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--voltura-text);
+            margin-bottom: 16px;
+            letter-spacing: 1px;
+        }
+
+        .voltura-captcha-input-group {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .voltura-captcha-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid var(--voltura-border);
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .voltura-captcha-input:focus {
+            outline: none;
+            border-color: var(--voltura-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .voltura-captcha-button {
+            background: var(--voltura-primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .voltura-captcha-button:hover {
+            background: var(--voltura-secondary);
+            transform: translateY(-1px);
+        }
+
+        .voltura-captcha-button:active {
+            transform: translateY(0);
+        }
+
+        .voltura-captcha-button:disabled {
+            background: var(--voltura-border);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .voltura-captcha-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 16px;
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        .voltura-captcha-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .voltura-captcha-action {
+            background: none;
+            border: none;
+            color: var(--voltura-primary);
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.875rem;
+        }
+
+        .voltura-captcha-action:hover {
+            background: var(--voltura-background);
+        }
+
+        .voltura-captcha-status {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .voltura-captcha-status.success {
+            background: #ecfdf5;
+            color: var(--voltura-success);
+            border: 1px solid #a7f3d0;
+            display: flex;
+        }
+
+        .voltura-captcha-status.error {
+            background: #fef2f2;
+            color: var(--voltura-error);
+            border: 1px solid #fecaca;
+            display: flex;
+        }
+
+        .voltura-captcha-status.warning {
+            background: #fffbeb;
+            color: var(--voltura-warning);
+            border: 1px solid #fed7aa;
+            display: flex;
+        }
+
+        .voltura-captcha-loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .voltura-captcha-loading.spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--voltura-border);
+            border-top: 3px solid var(--voltura-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .voltura-captcha-difficulty {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .voltura-difficulty-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--voltura-background);
+            color: var(--voltura-text);
+            border: 1px solid var(--voltura-border);
+        }
+
+        .voltura-difficulty-badge.active {
+            background: var(--voltura-primary);
+            color: white;
+            border-color: var(--voltura-primary);
+        }
+
+        .voltura-context-mobile .voltura-captcha-container {
+            max-width: 100%;
+            margin: 10px;
+        }
+
+        .voltura-context-dark .voltura-captcha-container {
+            background: #1e293b;
+            border-color: #374151;
+        }
+
+        .voltura-context-dark .voltura-captcha-challenge {
+            background: #374151;
+            border-color: #4b5563;
+            color: white;
+        }
+
+        .voltura-context-dark .voltura-captcha-input {
+            background: #4b5563;
+            border-color: #6b7280;
+            color: white;
+        }
+
+        .voltura-context-dark .voltura-captcha-input:focus {
+            border-color: var(--voltura-accent);
+        }
+    </style>
+</head>
+<body>
+    <div id="volturaCaptchaWidget" class="voltura-captcha-container">
+        <div class="voltura-captcha-header">
+            <div class="voltura-captcha-logo">
+                <i class="fas fa-shield-alt"></i>
+                Voltura Captcha
+            </div>
+        </div>
+
+        <div class="voltura-captcha-body">
+            <div id="volturaStatus" class="voltura-captcha-status"></div>
+
+            <div id="volturaLoading" class="voltura-captcha-loading">
+                <div class="voltura-captcha-loading spinner"></div>
+                <div>Loading challenge...</div>
+            </div>
+
+            <div id="volturaChallenge">
+                <div class="voltura-captcha-difficulty" id="difficultyBadges"></div>
+                
+                <div class="voltura-captcha-challenge">
+                    <div id="captchaQuestion" class="voltura-captcha-question"></div>
+                    
+                    <div class="voltura-captcha-input-group">
+                        <input 
+                            type="text" 
+                            id="captchaAnswer" 
+                            class="voltura-captcha-input" 
+                            placeholder="Enter your answer..."
+                            autocomplete="off"
+                        >
+                        <button id="submitCaptcha" class="voltura-captcha-button">
+                            <i class="fas fa-check"></i>
+                            Verify
+                        </button>
+                    </div>
+                </div>
+
+                <div class="voltura-captcha-footer">
+                    <div class="voltura-captcha-actions">
+                        <button id="refreshCaptcha" class="voltura-captcha-action" title="Get new challenge">
+                            <i class="fas fa-sync-alt"></i>
+                            Refresh
+                        </button>
+                        <button id="audioCaptcha" class="voltura-captcha-action" title="Audio challenge">
+                            <i class="fas fa-volume-up"></i>
+                            Audio
+                        </button>
+                        <button id="helpCaptcha" class="voltura-captcha-action" title="Get help">
+                            <i class="fas fa-question-circle"></i>
+                            Help
+                        </button>
+                    </div>
+                    
+                    <div class="voltura-captcha-security">
+                        <i class="fas fa-lock"></i>
+                        Secured by Voltura
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class VolturaCaptcha {
+            constructor() {
+                this.currentCaptchaId = null;
+                this.currentDifficulty = 'medium';
+                this.fallbackAttempts = 0;
+                this.maxFallbackAttempts = 2;
+                this.apiBaseUrl = window.location.origin + '/api';
+                
+                this.initializeElements();
+                this.attachEventListeners();
+                this.detectContext();
+                this.loadNewCaptcha();
+            }
+
+            initializeElements() {
+                this.elements = {
+                    widget: document.getElementById('volturaCaptchaWidget'),
+                    status: document.getElementById('volturaStatus'),
+                    loading: document.getElementById('volturaLoading'),
+                    challenge: document.getElementById('volturaChallenge'),
+                    question: document.getElementById('captchaQuestion'),
+                    answer: document.getElementById('captchaAnswer'),
+                    submit: document.getElementById('submitCaptcha'),
+                    refresh: document.getElementById('refreshCaptcha'),
+                    audio: document.getElementById('audioCaptcha'),
+                    help: document.getElementById('helpCaptcha'),
+                    difficultyBadges: document.getElementById('difficultyBadges')
+                };
+            }
+
+            detectContext() {
+                if (/Mobi|Android|iPhone|iPad/.test(navigator.userAgent)) {
+                    this.elements.widget.classList.add('voltura-context-mobile');
+                }
+
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    this.elements.widget.classList.add('voltura-context-dark');
+                }
+
+                this.checkAccessibilityNeeds();
+            }
+
+            checkAccessibilityNeeds() {
+                const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                if (prefersReducedMotion) {
+                    this.elements.widget.style.setProperty('--animation-duration', '0s');
+                }
+            }
+
+            async loadNewCaptcha(difficulty = null) {
+                this.showLoading();
+                this.resetForm();
+
+                if (difficulty) {
+                    this.currentDifficulty = difficulty;
+                }
+
+                try {
+                    const response = await fetch(`${this.apiBaseUrl}/captcha?difficulty=${this.currentDifficulty}`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        this.currentCaptchaId = data.captchaId;
+                        this.elements.question.textContent = data.question;
+                        this.updateDifficultyBadges(data.difficulty);
+                        this.showChallenge();
+                    } else {
+                        throw new Error('Failed to load CAPTCHA');
+                    }
+                } catch (error) {
+                    this.showStatus('Failed to load CAPTCHA challenge. Please try again.', 'error');
+                    setTimeout(() => this.loadNewCaptcha(), 2000);
+                }
+            }
+
+            updateDifficultyBadges(difficulty) {
+                const difficulties = [
+                    { id: 'easy', label: 'Easy', icon: 'fas fa-star' },
+                    { id: 'medium', label: 'Medium', icon: 'fas fa-star-half-alt' },
+                    { id: 'hard', label: 'Hard', icon: 'fas fa-star' },
+                    { id: 'extreme', label: 'Extreme', icon: 'fas fa-fire' }
+                ];
+
+                this.elements.difficultyBadges.innerHTML = difficulties.map(diff => `
+                    <span class="voltura-difficulty-badge ${diff.id === difficulty ? 'active' : ''}">
+                        <i class="${diff.icon}"></i>
+                        ${diff.label}
+                    </span>
+                `).join('');
+            }
+
+            async validateCaptcha() {
+                const answer = this.elements.answer.value.trim();
+                
+                if (!answer) {
+                    this.showStatus('Please enter your answer', 'warning');
+                    this.elements.answer.focus();
+                    return;
+                }
+
+                this.showLoading();
+                this.disableForm(true);
+
+                try {
+                    const response = await fetch(`${this.apiBaseUrl}/validate-captcha`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            captchaId: this.currentCaptchaId,
+                            answer: answer
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.valid) {
+                        this.showStatus('Verification successful!', 'success');
+                        this.onSuccess();
+                    } else {
+                        this.handleValidationFailure(result.reason);
+                    }
+                } catch (error) {
+                    this.showStatus('Network error. Please try again.', 'error');
+                } finally {
+                    this.disableForm(false);
+                    this.showChallenge();
+                }
+            }
+
+            handleValidationFailure(reason) {
+                this.fallbackAttempts++;
+                
+                if (this.fallbackAttempts >= this.maxFallbackAttempts) {
+                    this.switchToEasierDifficulty();
+                } else {
+                    this.showStatus(`Verification failed: ${reason}`, 'error');
+                    this.elements.answer.focus();
+                    this.elements.answer.select();
+                }
+            }
+
+            switchToEasierDifficulty() {
+                const difficulties = ['extreme', 'hard', 'medium', 'easy'];
+                const currentIndex = difficulties.indexOf(this.currentDifficulty);
+                const nextDifficulty = difficulties[Math.min(currentIndex + 1, difficulties.length - 1)];
+                
+                this.showStatus('Trying an easier challenge...', 'warning');
+                this.fallbackAttempts = 0;
+                this.loadNewCaptcha(nextDifficulty);
+            }
+
+            async loadAudioCaptcha() {
+                this.showStatus('Loading audio challenge...', 'warning');
+                setTimeout(() => {
+                    this.showStatus('Audio CAPTCHA not yet implemented', 'warning');
+                }, 1000);
+            }
+
+            showHelp() {
+                this.showStatus('Solve the challenge above to verify you are human. Use refresh for a new challenge.', 'warning');
+            }
+
+            showLoading() {
+                this.elements.loading.style.display = 'block';
+                this.elements.challenge.style.display = 'none';
+                this.elements.status.style.display = 'none';
+            }
+
+            showChallenge() {
+                this.elements.loading.style.display = 'none';
+                this.elements.challenge.style.display = 'block';
+                this.elements.answer.focus();
+            }
+
+            showStatus(message, type = 'info') {
+                this.elements.status.textContent = message;
+                this.elements.status.className = `voltura-captcha-status ${type}`;
+                this.elements.status.style.display = 'flex';
+                
+                if (type === 'success') {
+                    setTimeout(() => {
+                        this.elements.status.style.display = 'none';
+                    }, 3000);
+                }
+            }
+
+            resetForm() {
+                this.elements.answer.value = '';
+                this.elements.status.style.display = 'none';
+            }
+
+            disableForm(disabled) {
+                this.elements.answer.disabled = disabled;
+                this.elements.submit.disabled = disabled;
+                this.elements.refresh.disabled = disabled;
+            }
+
+            attachEventListeners() {
+                this.elements.submit.addEventListener('click', () => this.validateCaptcha());
+                this.elements.refresh.addEventListener('click', () => this.loadNewCaptcha());
+                this.elements.audio.addEventListener('click', () => this.loadAudioCaptcha());
+                this.elements.help.addEventListener('click', () => this.showHelp());
+                
+                this.elements.answer.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.validateCaptcha();
+                    }
+                });
+
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden && this.currentCaptchaId) {
+                        this.loadNewCaptcha();
+                    }
+                });
+            }
+
+            onSuccess() {
+                console.log('CAPTCHA verification successful');
+            }
+
+            reset() {
+                this.fallbackAttempts = 0;
+                this.currentDifficulty = 'medium';
+                this.loadNewCaptcha();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.volturaCaptcha = new VolturaCaptcha();
+        });
+
+        if (typeof module !== 'undefined' && module.exports) {
+            module.exports = VolturaCaptcha;
+        }
+    </script>
+</body>
+</html>
