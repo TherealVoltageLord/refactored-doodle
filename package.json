@@ -7,13 +7,16 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test-captcha.js"
+    "test": "node test-captcha.js",
+    "render-build": "npm install",
+    "render-start": "node server.js"
   },
   "keywords": [
     "captcha",
     "security",
     "bot-protection",
-    "authentication"
+    "authentication",
+    "voltura"
   ],
   "author": "Voltura Systems",
   "license": "MIT",
