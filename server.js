@@ -4,8 +4,28 @@ import { v4 as uuid } from "uuid";
 import { generateCaptcha } from "./captcha.js";
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// Middleware
+const config = {
+  rateLimit: {
+    captchaGeneration: { windowMs: 15 * 60 * 1000, max: 100 },
+    captchaValidation: { windowMs: 15 * 60 * 1000, max: 200 },
+    general: { windowMs: 15 * 60 * 1000, max: 500 }
+  },
+  captcha: {
+    expiration: 10 * 60 * 1000,
+    maxAttempts: 3,
+    cleanupInterval: 5 * 60 * 1000
+  },
+  security: {
+    maxAnswerLength: 10,
+    allowedDifficulties: ['easy', 'medium', 'hard', 'extreme']
+  }
+};
+
+const requestCounts = new Map();
+const captchaStore = new Map();
+
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') || [
     'http://localhost:3000',
@@ -20,33 +40,8 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-// Serve static files for demo
 app.use(express.static('public'));
 
-// Rate limiting store
-const requestCounts = new Map();
-const captchaStore = new Map();
-
-// Configuration
-const config = {
-  rateLimit: {
-    captchaGeneration: { windowMs: 15 * 60 * 1000, max: 100 },
-    captchaValidation: { windowMs: 15 * 60 * 1000, max: 200 },
-    general: { windowMs: 15 * 60 * 1000, max: 500 }
-  },
-  captcha: {
-    expiration: 10 * 60 * 1000, // 10 minutes
-    maxAttempts: 3,
-    cleanupInterval: 5 * 60 * 1000 // 5 minutes
-  },
-  security: {
-    maxAnswerLength: 10,
-    allowedDifficulties: ['easy', 'medium', 'hard', 'extreme']
-  }
-};
-
-// Advanced rate limiting middleware
 const advancedRateLimit = (req, res, next) => {
   const ip = req.ip || req.connection.remoteAddress || 'unknown';
   const path = req.path;
@@ -71,47 +66,27 @@ const advancedRateLimit = (req, res, next) => {
     return res.status(429).json({ 
       success: false,
       error: "Too many requests", 
-      retryAfter: Math.ceil((requests[0] + limitConfig.windowMs - now) / 1000),
-      limit: limitConfig.max,
-      window: `${limitConfig.windowMs / 60000} minutes`
+      retryAfter: Math.ceil((requests[0] + limitConfig.windowMs - now) / 1000)
     });
   }
 
   requests.push(now);
-  req.rateLimitInfo = {
-    remaining: limitConfig.max - requests.length,
-    limit: limitConfig.max,
-    reset: new Date(requests[0] + limitConfig.windowMs)
-  };
-  
   next();
 };
 
 app.use(advancedRateLimit);
 
-// Bot detection middleware
 const botDetection = (req, res, next) => {
   const userAgent = req.headers['user-agent'] || '';
-  const accept = req.headers['accept'] || '';
-  const acceptLanguage = req.headers['accept-language'] || '';
-  const acceptEncoding = req.headers['accept-encoding'] || '';
-  
   let botScore = 0;
   const botSignals = [];
   
-  // Check for missing headers
   if (!userAgent) {
     botScore += 10;
     botSignals.push('missing-user-agent');
   }
   
-  // Check for known bot user agents
-  const botPatterns = [
-    /bot/i, /crawl/i, /spider/i, /scrape/i, 
-    /python/i, /curl/i, /wget/i, /phantom/i,
-    /headless/i, /chrome-lighthouse/i
-  ];
-  
+  const botPatterns = [/bot/i, /crawl/i, /spider/i, /scrape/i, /python/i, /curl/i, /wget/i, /phantom/i, /headless/i];
   botPatterns.forEach(pattern => {
     if (pattern.test(userAgent)) {
       botScore += 5;
@@ -119,18 +94,10 @@ const botDetection = (req, res, next) => {
     }
   });
   
-  // Check for suspicious accept headers
-  if (!accept.includes('application/json') && !accept.includes('text/html')) {
-    botScore += 3;
-    botSignals.push('suspicious-accept');
-  }
-  
-  // Check request timing (simplified)
   req._startTime = Date.now();
-  
   res.on('finish', () => {
     const responseTime = Date.now() - req._startTime;
-    if (responseTime < 50) { // Too fast = likely automated
+    if (responseTime < 50) {
       botScore += 5;
       botSignals.push('fast-response');
     }
@@ -143,7 +110,6 @@ const botDetection = (req, res, next) => {
 
 app.use(botDetection);
 
-// Context-aware difficulty determination
 function determineDifficulty(req, requestedDifficulty) {
   if (requestedDifficulty && config.security.allowedDifficulties.includes(requestedDifficulty)) {
     return requestedDifficulty;
@@ -153,16 +119,14 @@ function determineDifficulty(req, requestedDifficulty) {
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(userAgent);
   const isTablet = /Tablet|iPad/i.test(userAgent);
   
-  // Adjust difficulty based on context
   if (isMobile) return 'easy';
   if (isTablet) return 'medium';
   if (req.botScore > 15) return 'hard';
   if (req.botScore > 25) return 'extreme';
   
-  return 'medium'; // Default
+  return 'medium';
 }
 
-// Generate CAPTCHA endpoint
 app.get("/api/captcha", (req, res) => {
   try {
     const requestedDifficulty = req.query.difficulty;
@@ -171,7 +135,6 @@ app.get("/api/captcha", (req, res) => {
     const id = uuid();
     const { question, answer, type } = generateCaptcha(contextDifficulty);
 
-    // Store CAPTCHA data
     captchaStore.set(id, { 
       answer, 
       createdAt: Date.now(),
@@ -183,7 +146,6 @@ app.get("/api/captcha", (req, res) => {
         userAgent: req.headers['user-agent'],
         ip: req.ip,
         botScore: req.botScore,
-        botSignals: req.botSignals,
         requestedDifficulty,
         determinedDifficulty: contextDifficulty
       }
@@ -195,8 +157,7 @@ app.get("/api/captcha", (req, res) => {
       question,
       type,
       difficulty: contextDifficulty,
-      expiresIn: `${config.captcha.expiration / 60000} minutes`,
-      rateLimit: req.rateLimitInfo
+      expiresIn: `${config.captcha.expiration / 60000} minutes`
     });
 
   } catch (error) {
@@ -208,12 +169,10 @@ app.get("/api/captcha", (req, res) => {
   }
 });
 
-// Validate CAPTCHA endpoint
 app.post("/api/validate-captcha", (req, res) => {
   try {
     const { captchaId, answer } = req.body;
 
-    // Input validation
     if (!captchaId || answer === undefined || answer === null) {
       return res.status(400).json({ 
         success: false,
@@ -230,7 +189,6 @@ app.post("/api/validate-captcha", (req, res) => {
       });
     }
 
-    // Check if CAPTCHA exists
     if (!captchaStore.has(captchaId)) {
       return res.json({ 
         success: false,
@@ -241,7 +199,6 @@ app.post("/api/validate-captcha", (req, res) => {
 
     const captchaData = captchaStore.get(captchaId);
     
-    // Check expiry
     if (Date.now() > captchaData.expiresAt) {
       captchaStore.delete(captchaId);
       return res.json({ 
@@ -251,7 +208,6 @@ app.post("/api/validate-captcha", (req, res) => {
       });
     }
 
-    // Check attempts
     captchaData.attempts++;
     if (captchaData.attempts > config.captcha.maxAttempts) {
       captchaStore.delete(captchaId);
@@ -262,11 +218,9 @@ app.post("/api/validate-captcha", (req, res) => {
       });
     }
 
-    // Validate answer
     const userAnswer = parseInt(answer);
     const isValid = !isNaN(userAnswer) && userAnswer === captchaData.answer;
     
-    // Store validation result
     captchaData.lastValidation = {
       timestamp: Date.now(),
       valid: isValid,
@@ -274,11 +228,9 @@ app.post("/api/validate-captcha", (req, res) => {
       actualAnswer: captchaData.answer
     };
 
-    // One-time use - delete after successful validation
     if (isValid) {
       captchaStore.delete(captchaId);
     } else {
-      // Update store with attempt count
       captchaStore.set(captchaId, captchaData);
     }
 
@@ -286,8 +238,7 @@ app.post("/api/validate-captcha", (req, res) => {
       success: true,
       valid: isValid,
       reason: isValid ? undefined : "Wrong answer",
-      attempts: captchaData.attempts,
-      difficulty: captchaData.difficulty
+      attempts: captchaData.attempts
     });
 
   } catch (error) {
@@ -300,12 +251,10 @@ app.post("/api/validate-captcha", (req, res) => {
   }
 });
 
-// Fallback CAPTCHA endpoint
 app.get("/api/captcha/fallback", (req, res) => {
   try {
     const { reason, previousDifficulty, previousCaptchaId } = req.query;
     
-    // Determine appropriate fallback difficulty
     let fallbackDifficulty = 'easy';
     const difficulties = ['extreme', 'hard', 'medium', 'easy'];
     
@@ -314,12 +263,10 @@ app.get("/api/captcha/fallback", (req, res) => {
       fallbackDifficulty = difficulties[Math.min(currentIndex + 1, difficulties.length - 1)];
     }
     
-    // Clean up previous CAPTCHA if provided
     if (previousCaptchaId && captchaStore.has(previousCaptchaId)) {
       captchaStore.delete(previousCaptchaId);
     }
     
-    // Redirect to main CAPTCHA endpoint with adjusted difficulty
     res.redirect(`/api/captcha?difficulty=${fallbackDifficulty}&fallback=true&reason=${encodeURIComponent(reason || 'unknown')}`);
     
   } catch (error) {
@@ -328,7 +275,6 @@ app.get("/api/captcha/fallback", (req, res) => {
   }
 });
 
-// Analytics endpoint
 app.get("/api/analytics", (req, res) => {
   const now = Date.now();
   const activeCaptchas = Array.from(captchaStore.values());
@@ -346,23 +292,16 @@ app.get("/api/analytics", (req, res) => {
       validationAttempts: 0,
       successfulValidations: 0,
       failedValidations: 0
-    },
-    rateLimiting: {
-      activeIPs: requestCounts.size
     }
   };
   
-  // Calculate CAPTCHA statistics
   activeCaptchas.forEach(captcha => {
-    // By difficulty
     stats.captchas.byDifficulty[captcha.difficulty] = 
       (stats.captchas.byDifficulty[captcha.difficulty] || 0) + 1;
     
-    // By type
     stats.captchas.byType[captcha.type] = 
       (stats.captchas.byType[captcha.type] || 0) + 1;
     
-    // Validation stats
     stats.captchas.validationAttempts += captcha.attempts;
     if (captcha.lastValidation) {
       if (captcha.lastValidation.valid) {
@@ -379,7 +318,6 @@ app.get("/api/analytics", (req, res) => {
   });
 });
 
-// Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
@@ -391,23 +329,16 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Service statistics
 app.get("/api/stats", (req, res) => {
   res.json({
     success: true,
     data: {
       activeCaptchas: captchaStore.size,
-      rateLimitedIPs: requestCounts.size,
-      configuration: {
-        captchaExpiration: `${config.captcha.expiration / 60000} minutes`,
-        maxAttempts: config.captcha.maxAttempts,
-        allowedDifficulties: config.security.allowedDifficulties
-      }
+      rateLimitedIPs: requestCounts.size
     }
   });
 });
 
-// Demo page
 app.get("/", (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -416,41 +347,11 @@ app.get("/", (req, res) => {
         <title>Voltura Captcha - Demo</title>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
-            body { 
-                font-family: 'Segoe UI', system-ui, sans-serif; 
-                max-width: 800px; 
-                margin: 0 auto; 
-                padding: 20px; 
-                background: #f5f5f5;
-            }
-            .header { 
-                text-align: center; 
-                margin-bottom: 40px; 
-                background: white;
-                padding: 30px;
-                border-radius: 12px;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }
-            .demo-container { 
-                background: white; 
-                padding: 30px; 
-                border-radius: 12px; 
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                margin-bottom: 20px;
-            }
-            .api-info { 
-                background: #f8f9fa; 
-                padding: 20px; 
-                border-radius: 8px; 
-                margin-top: 20px; 
-            }
-            .endpoint { 
-                background: #e9ecef; 
-                padding: 10px; 
-                border-radius: 4px; 
-                margin: 10px 0; 
-                font-family: monospace; 
-            }
+            body { font-family: 'Segoe UI', system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+            .header { text-align: center; margin-bottom: 40px; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .demo-container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+            .api-info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 20px; }
+            .endpoint { background: #e9ecef; padding: 10px; border-radius: 4px; margin: 10px 0; font-family: monospace; }
         </style>
     </head>
     <body>
@@ -480,14 +381,10 @@ app.get("/", (req, res) => {
                 
                 <h3>Analytics</h3>
                 <div class="endpoint">GET /api/analytics</div>
-                
-                <h3>Health Check</h3>
-                <div class="endpoint">GET /api/health</div>
             </div>
         </div>
 
         <script>
-            // Simple demo integration
             fetch('/api/captcha')
                 .then(r => r.json())
                 .then(data => {
@@ -496,7 +393,6 @@ app.get("/", (req, res) => {
                             <div style="border: 2px solid #e2e8f0; padding: 20px; border-radius: 8px;">
                                 <h3>Challenge: \${data.question}</h3>
                                 <p><strong>Type:</strong> \${data.type} | <strong>Difficulty:</strong> \${data.difficulty}</p>
-                                <p><small>CAPTCHA ID: \${data.captchaId}</small></p>
                             </div>
                         \`;
                     }
@@ -507,21 +403,17 @@ app.get("/", (req, res) => {
   `);
 });
 
-// Cleanup expired data
 setInterval(() => {
   const now = Date.now();
   let expiredCount = 0;
-  let attemptCount = 0;
 
   for (const [id, data] of captchaStore.entries()) {
     if (now > data.expiresAt) {
       captchaStore.delete(id);
       expiredCount++;
     }
-    attemptCount += data.attempts;
   }
 
-  // Clean rate limit data (keep last 24 hours only)
   const rateLimitCleanupWindow = 24 * 60 * 60 * 1000;
   for (const [key, requests] of requestCounts.entries()) {
     const validRequests = requests.filter(time => now - time < rateLimitCleanupWindow);
@@ -532,22 +424,20 @@ setInterval(() => {
     }
   }
 
-  if (expiredCount > 0 || attemptCount > 0) {
-    console.log(`[Cleanup] Removed ${expiredCount} expired CAPTCHAs, tracked ${attemptCount} attempts`);
+  if (expiredCount > 0) {
+    console.log(`[Cleanup] Removed ${expiredCount} expired CAPTCHAs`);
   }
 }, config.captcha.cleanupInterval);
 
-// Error handling middleware
 app.use((error, req, res, next) => {
   console.error('Unhandled error:', error);
   res.status(500).json({
     success: false,
     error: "Internal server error",
-    reference: uuid() // For support tracking
+    reference: uuid()
   });
 });
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -556,25 +446,10 @@ app.use((req, res) => {
   });
 });
 
-// Server startup
-const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
-  console.log(`
-╔═══════════════════════════════════════════════╗
-║            Voltura Captcha Server            ║
-║                 v1.0.0                       ║
-║                                               ║
-║   🚀 Server running on port ${PORT}           ║
-║   📊 Analytics: /api/analytics               ║
-║   ❤️  Health: /api/health                    ║
-║   🔒 CAPTCHA: /api/captcha                   ║
-║                                               ║
-║   Environment: ${process.env.NODE_ENV || 'development'} ║
-╚═══════════════════════════════════════════════╝
-  `);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Voltura Captcha Server running on port ${PORT}`);
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   server.close(() => {
