@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: voltura-captcha
+    env: node
+    plan: free
+    region: ohio
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CAPTCHA_EXPIRY
+        value: 10
+      - key: MAX_ATTEMPTS
+        value: 3
+      - key: RATE_LIMIT_ENABLED
+        value: true
+      - key: BOT_DETECTION_ENABLED
+        value: true
+    healthCheckPath: /api/health
+    initialDelaySec: 30
+    autoDeploy: true-
